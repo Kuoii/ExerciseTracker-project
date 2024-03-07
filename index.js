@@ -30,34 +30,41 @@ app.post("/api/users", (req, res) => {
     res.json(postedQuery);
 });
 
-app.get("/api/users/:_id/logs/:limit?", (req, res) => {
+app.get("/api/users/:_id/logs", (req, res) => {
     const usernameQuery = db.prepare(
         "SELECT username FROM users WHERE user_id = @_id"
     );
-    const query = db.prepare(
-        "SELECT description, duration, date FROM exercises WHERE user_id = @_id" // LIMIT @limit"
-    );
-    const exercises = query.all(req.params);
-    const count = exercises.length;
 
-    res.json({
-        ...usernameQuery.get(req.params),
-        count: count,
-        _id: req.params._id,
-        log: exercises,
-    });
-});
-app.get("/api/users/:_id/logs/:from/:to/:limit?", (req, res) => {
-    const usernameQuery = db.prepare(
-        "SELECT username FROM users WHERE user_id = @_id"
-    );
+    const _id = req.params._id;
+    const oldestDate = db
+        .prepare(
+            "SELECT MIN(date) AS oldestDate FROM exercises WHERE user_id = @_id"
+        )
+        .get({ _id });
+
+    const from = req.query.from
+        ? req.query.from
+        : new Date(oldestDate.oldestDate).toISOString().split("T")[0];
+    const to = req.query.to
+        ? req.query.to
+        : new Date().toISOString().split("T")[0];
+    const limit =
+        req.query.limit && !isNaN(parseInt(req.query.limit))
+            ? parseInt(req.query.limit)
+            : -1;
+    const params = { _id, from, to, limit };
+    //console.log(parseInt(req.query.limit), params);
+
     const query = db.prepare(
         "SELECT description, duration, date FROM exercises WHERE user_id = @_id AND date BETWEEN @from AND @to LIMIT @limit"
     );
-    const exercises = query.all(req.params);
+    const exercises = query.all({ ...params });
     const count = exercises.length;
+    for (let i = 0; i < count; i++) {
+        exercises[i].date = new Date(exercises[i].date).toDateString();
+    }
 
-    console.log(req.params.from, req.params.to);
+    //console.log(from);
     res.json({
         ...usernameQuery.get(req.params),
         count: count,
@@ -65,8 +72,9 @@ app.get("/api/users/:_id/logs/:from/:to/:limit?", (req, res) => {
         log: exercises,
     });
 });
+
 app.post("/api/users/:_id/exercises", (req, res) => {
-    console.log(req.body);
+    //console.log(req.body);
     const { description, duration, date } = req.body;
     const _id = req.params._id;
     const queryValues = {
@@ -82,11 +90,12 @@ app.post("/api/users/:_id/exercises", (req, res) => {
         "SELECT username FROM users WHERE user_id = @_id"
     );
     const postedQuery = query.get(queryValues);
+    postedQuery.date = new Date(postedQuery.date).toDateString();
     const resObject = {
-        username: usernameQuery.get(req.params).username,
+        ...usernameQuery.get(req.params),
         ...postedQuery,
     };
-    console.log(usernameQuery.get(req.params));
+    //console.log(usernameQuery.get(req.params));
     res.json(resObject);
 });
 
